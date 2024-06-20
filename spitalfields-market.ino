@@ -1,4 +1,5 @@
 #include "rfid.h"
+#include "wavtrigger.h"
 
 struct rfidStatus  // to keep the details of each card in
 {
@@ -12,10 +13,63 @@ void setup() {
   #ifdef DEBUG
   Serial.begin(9600);
   #endif
+  delay(1000);
   init_rfid();
+  wTrig.start();
+  delay(10);
+  wTrig.stopAllTracks();
+  wTrig.samplerateOffset(0);
+  wTrig.masterGain(-12);                  // Reset the master gain to 0dB
+  wTrig.setReporting(true);
+  delay(100); 
+}
+
+const int numberOfRfids = 15;
+unsigned long rfids[numberOfRfids] = {3618, 30577, -16606, 1570, 13425, 13169, -2270, -3550, 30065, 28529, -222, -2014, -15838, -3294, -10974 };
+bool playTheTrack[numberOfRfids] = {false, false, false, false, false, false, false, false, false, false, false, false, false, false, false };
+bool trackPlaying[numberOfRfids] = {false, false, false, false, false, false, false, false, false, false, false, false, false, false, false };
+
+
+void checkTrackStatus() {\
+  int checkAllOff = 0;
+  for (int i = 0; i < numberOfRfids; i++) {
+    // bool status = wTrig.isTrackPlaying(i+1);
+    // Serial.print(status);
+    // Serial.print(" ");
+    // Serial.println(trackPlaying[i]);
+    if (playTheTrack[i] && !trackPlaying[i]) {
+      Serial.print(playTheTrack[i]);
+      Serial.println(trackPlaying[i]);
+      wTrig.trackPlaySolo(i+1);
+      delay(50);
+      wTrig.trackPlaySolo(i+1);
+      trackPlaying[i] = true;
+    } else if (!playTheTrack[i] && trackPlaying[i]){
+      Serial.println("are we here?");
+      wTrig.trackStop(i+1);
+      delay(50);
+      wTrig.trackStop(i+1);
+      delay(50);
+      wTrig.trackStop(i+1);
+      trackPlaying[i] = false;
+    }
+
+    if (!playTheTrack[i]) {
+      checkAllOff = checkAllOff + 1;
+    }
+
+    if (checkAllOff == numberOfRfids-1) {
+      wTrig.stopAllTracks(); 
+    }
+  }
 }
 
 void loop() {
+
+  wTrig.update(); 
+
+  checkTrackStatus();
+
   for (uint8_t reader = 0; reader < NR_OF_READERS; reader++)
   {
     int rfid_removed[NR_OF_READERS];    //create an array to store values in
@@ -28,8 +82,17 @@ void loop() {
       Serial.print("Reader ");
       Serial.print(reader);
       Serial.print(":");
-      Serial.print(rfid_removed[reader], HEX);
+      Serial.print(rfid_removed[reader]);
       Serial.println(" REMOVED");
+
+      for (int i = 0; i < numberOfRfids; i++){
+        if (rfid_removed[reader] == rfids[i]) {
+          Serial.print("stop ");
+          Serial.println(i+1);
+          playTheTrack[i] = false;
+        }
+      }
+      
       #endif
       readerState[reader]= false;
       readers[reader].state = 0;
@@ -45,8 +108,22 @@ void loop() {
       Serial.print("Reader ");
       Serial.print(reader);
       Serial.print(":");
-      Serial.print(rfid_added[reader], HEX);
+      Serial.print(rfid_added[reader]);
       Serial.println(" ADDED");
+
+      // if (rfid_added[reader] == rfids) {
+      //   Serial.println("play");
+      // }
+
+      for (int i = 0; i < numberOfRfids; i++){
+        if (rfid_added[reader] == rfids[i]) {
+          Serial.print("play ");
+          Serial.println(i+1);
+          playTheTrack[i] = true;
+        }
+      }
+
+
       #endif
       readerState[reader] = true;
       readers[reader].state = 1;
@@ -54,6 +131,14 @@ void loop() {
     }
     }
 }
+
+
+
+
+
+
+
+
 
 // function that executes whenever data is requested by master
 // this function is registered as an event, see setup()
